@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
-import axios from "axios";
+import api, { API_URL } from "../services/api";
 import {
   CreditCard,
   CheckCircle2,
@@ -12,6 +12,8 @@ import {
   ArrowLeft,
   Sparkles,
   Zap,
+  User,
+  LogIn,
 } from "lucide-react";
 
 export default function Checkout() {
@@ -19,12 +21,43 @@ export default function Checkout() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState(null);
+  const [user, setUser] = useState({});
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      setIsLoggedIn(true);
+      try {
+        const u = JSON.parse(localStorage.getItem("user") || "{}");
+        setUser(u);
+      } catch {}
+    } else {
+      setIsLoggedIn(false);
+    }
+  }, []);
+
+  // Load Razorpay script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
   if (!state) {
     return (
       <div className="container mx-auto px-4 py-20 text-center max-w-md">
         <h2 className="text-xl font-bold text-gray-800">No Booking Details Selected</h2>
-        <p className="text-sm text-gray-500 mt-2">Please select a destination package to start checkout.</p>
+        <p className="text-sm text-gray-500 mt-2">
+          Please select a destination package to start checkout.
+        </p>
         <Link
           to="/destinations"
           className="mt-5 inline-block px-5 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold"
@@ -47,31 +80,16 @@ export default function Checkout() {
     propertyName,
   } = state;
 
-  // Load Razorpay script
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
-  }, []);
-
   // Razorpay Gateway Payment
   const handleRazorpayPayment = async () => {
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:5000/api/payment/create-order", {
+      const res = await api.post("/api/payment/create-order", {
         amount: totalPrice,
       });
 
       const { order, keyId } = res.data;
-
-      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
 
       const options = {
         key: keyId || "rzp_test_ABC123XYZ456",
@@ -82,25 +100,19 @@ export default function Checkout() {
         order_id: order.id,
         handler: async function (response) {
           try {
-            const verifyRes = await axios.post(
-              "http://localhost:5000/api/payment/verify-payment",
-              {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                bookingData: {
-                  destinationId: destination._id,
-                  destinationTitle: destination.title,
-                  hotelName: hotel?.name || "Standard Accommodations",
-                  checkIn,
-                  checkOut,
-                  amount: totalPrice,
-                },
+            const verifyRes = await api.post("/api/payment/verify-payment", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              bookingData: {
+                destinationId: destination._id,
+                destinationTitle: destination.title,
+                hotelName: hotel?.name || "Standard Accommodations",
+                checkIn,
+                checkOut,
+                amount: totalPrice,
               },
-              {
-                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-              }
-            );
+            });
 
             if (verifyRes.data.success) {
               setConfirmedBooking(verifyRes.data.booking);
@@ -113,9 +125,9 @@ export default function Checkout() {
           }
         },
         prefill: {
-          name: user.name || "Guest Traveler",
-          email: user.email || "traveler@example.com",
-          contact: user.phone || "9876543210",
+          name: currentUser.name || "Guest Traveler",
+          email: currentUser.email || "traveler@example.com",
+          contact: currentUser.phone || "9876543210",
         },
         theme: {
           color: "#0d9488",
@@ -143,22 +155,16 @@ export default function Checkout() {
   const handleInstantBooking = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(
-        "http://localhost:5000/api/payment/instant-booking",
-        {
-          bookingData: {
-            destinationId: destination._id,
-            destinationTitle: destination.title,
-            hotelName: hotel?.name || "Standard Accommodations",
-            checkIn,
-            checkOut,
-            amount: totalPrice,
-          },
+      const res = await api.post("/api/payment/instant-booking", {
+        bookingData: {
+          destinationId: destination._id,
+          destinationTitle: destination.title,
+          hotelName: hotel?.name || "Standard Accommodations",
+          checkIn,
+          checkOut,
+          amount: totalPrice,
         },
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }
-      );
+      });
 
       if (res.data.success) {
         setConfirmedBooking(res.data.booking);
@@ -195,7 +201,9 @@ export default function Checkout() {
           <div className="p-4 bg-gray-50 rounded-2xl text-left text-xs space-y-2 border border-gray-100 font-mono">
             <div className="flex justify-between">
               <span className="text-gray-500">Booking Ref:</span>
-              <span className="font-bold text-gray-900">{confirmedBooking.orderId || confirmedBooking._id}</span>
+              <span className="font-bold text-gray-900">
+                {confirmedBooking.orderId || confirmedBooking._id}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Payment Ref:</span>
@@ -203,24 +211,28 @@ export default function Checkout() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Dates:</span>
-              <span className="text-gray-900">{checkIn} → {checkOut}</span>
+              <span className="text-gray-900">
+                {checkIn} → {checkOut}
+              </span>
             </div>
             <div className="flex justify-between border-t pt-2">
               <span className="text-gray-500">Total Paid:</span>
-              <span className="font-bold text-gray-900 text-sm">₹{totalPrice?.toLocaleString()}</span>
+              <span className="font-bold text-gray-900 text-sm">
+                ₹{totalPrice?.toLocaleString()}
+              </span>
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <Link
               to="/my-bookings"
-              className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-md shadow-teal-500/20 transition"
+              className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-xs shadow-md shadow-teal-500/20 transition cursor-pointer"
             >
-              View My Bookings
+              View My Bookings & Vouchers
             </Link>
             <Link
               to="/destinations"
-              className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-xs transition"
+              className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-xs transition cursor-pointer"
             >
               Explore More Trips
             </Link>
@@ -290,7 +302,7 @@ export default function Checkout() {
                   <Building2 className="w-4 h-4 text-teal-700" />
                   <span className="font-bold text-gray-900">{hotel.name}</span>
                 </div>
-                <span className="font-bold text-teal-800">₹{hotel.price} / night</span>
+                <span className="font-bold text-teal-800">₹{hotel.price?.toLocaleString()} / night</span>
               </div>
               <p className="text-gray-500 mt-1">{hotel.city}</p>
             </div>
@@ -317,6 +329,55 @@ export default function Checkout() {
               <span className="text-teal-700">₹{totalPrice?.toLocaleString()}</span>
             </div>
           </div>
+
+          {/* Traveler Status & Login Banner */}
+          {!isLoggedIn ? (
+            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 space-y-3">
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-xs sm:text-sm">
+                    Sign in to link booking to your account
+                  </h4>
+                  <p className="text-[11px] text-amber-700 mt-0.5">
+                    Signing in lets you view your voucher on all devices, request instant cancellations, and track your booking history.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("/auth", {
+                      state: { from: "/checkout", checkoutState: state },
+                    })
+                  }
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In / Register</span>
+                </button>
+                <span className="text-[11px] text-amber-600">or continue below as Guest</span>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 bg-teal-50 rounded-2xl border border-teal-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 bg-teal-600 text-white rounded-full flex items-center justify-center font-bold text-xs">
+                  {user.name?.charAt(0).toUpperCase() || "U"}
+                </div>
+                <div>
+                  <span className="font-bold text-gray-900">{user.name}</span>
+                  <span className="text-gray-500 ml-1.5 font-mono text-[11px]">
+                    ({user.email})
+                  </span>
+                </div>
+              </div>
+              <span className="text-teal-700 font-bold bg-teal-100/60 px-2 py-0.5 rounded text-[10px]">
+                Verified Traveler
+              </span>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-gray-100 space-y-3">

@@ -13,6 +13,8 @@ import {
   Clock,
   Sparkles,
   Settings,
+  Search,
+  Filter,
 } from "lucide-react";
 
 export default function RecruiterDashboard() {
@@ -24,6 +26,11 @@ export default function RecruiterDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState("");
+
+  // Applicant Filtering State
+  const [filterJobId, setFilterJobId] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterSearch, setFilterSearch] = useState("");
 
   // Post Job Form State
   const [jobForm, setJobForm] = useState({
@@ -242,6 +249,25 @@ export default function RecruiterDashboard() {
     );
   }
 
+  const filteredApplicants = applicants.filter((app) => {
+    if (filterJobId !== "ALL") {
+      const jId = app.job?._id || app.job;
+      if (jId !== filterJobId) return false;
+    }
+    if (filterStatus !== "ALL" && app.status !== filterStatus) {
+      return false;
+    }
+    if (filterSearch.trim()) {
+      const q = filterSearch.toLowerCase().trim();
+      const matchName = app.applicantName?.toLowerCase().includes(q);
+      const matchEmail = app.applicantEmail?.toLowerCase().includes(q);
+      const matchJob = app.job?.title?.toLowerCase().includes(q);
+      const matchSkills = app.skills?.some((s) => s.toLowerCase().includes(q));
+      if (!matchName && !matchEmail && !matchJob && !matchSkills) return false;
+    }
+    return true;
+  });
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {/* Header Bar */}
@@ -327,14 +353,71 @@ export default function RecruiterDashboard() {
       {/* TAB 1: APPLICANTS PIPELINE */}
       {activeTab === "applicants" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between pb-2">
-            <h2 className="text-lg font-bold text-gray-900">
-              Incoming Applications ({applicants.length})
-            </h2>
-            <p className="text-xs text-gray-500">
-              Review candidate credentials and update hiring stages
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Incoming Applications ({applicants.length})
+              </h2>
+              <p className="text-xs text-gray-500">
+                Review candidate credentials, filter by opening, and update hiring stages
+              </p>
+            </div>
+            {applicants.length > 0 && (
+              <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-full self-start sm:self-auto">
+                Showing {filteredApplicants.length} of {applicants.length}
+              </span>
+            )}
           </div>
+
+          {/* Filter Toolbar */}
+          {applicants.length > 0 && (
+            <div className="p-4 bg-white rounded-2xl border border-gray-200 shadow-2xs grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  placeholder="Search candidate name, email, skills..."
+                  className="w-full pl-8 pr-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50/50"
+                />
+              </div>
+
+              {/* Job Filter */}
+              <div>
+                <select
+                  value={filterJobId}
+                  onChange={(e) => setFilterJobId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50/50 cursor-pointer"
+                >
+                  <option value="ALL">All Job Openings ({jobs.length})</option>
+                  {jobs.map((j) => (
+                    <option key={j._id} value={j._id}>
+                      {j.title} ({j.jobType})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50/50 cursor-pointer"
+                >
+                  <option value="ALL">All Application Statuses</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Under Review">Under Review</option>
+                  <option value="Shortlisted">Shortlisted</option>
+                  <option value="Interviewing">Interviewing</option>
+                  <option value="Accepted">Accepted / Offer</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {applicants.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-2xl border border-gray-200">
@@ -344,9 +427,26 @@ export default function RecruiterDashboard() {
                 Candidates applying directly or via multi-company batch apply will appear here.
               </p>
             </div>
+          ) : filteredApplicants.length === 0 ? (
+            <div className="p-12 text-center bg-white rounded-2xl border border-gray-200 text-xs text-gray-500">
+              <p className="font-semibold text-gray-700">
+                No candidates match your current filter criteria.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterJobId("ALL");
+                  setFilterStatus("ALL");
+                  setFilterSearch("");
+                }}
+                className="mt-3 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-bold transition cursor-pointer"
+              >
+                Clear All Filters
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
-              {applicants.map((app) => (
+              {filteredApplicants.map((app) => (
                 <div
                   key={app._id}
                   className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200 shadow-xs hover:border-indigo-200 transition"

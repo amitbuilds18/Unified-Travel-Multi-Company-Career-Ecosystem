@@ -18,6 +18,8 @@ import {
   ChevronDown,
   Sparkles,
   CreditCard,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 
 export default function DestinationDetail() {
@@ -36,6 +38,22 @@ export default function DestinationDetail() {
   const [activeTab, setActiveTab] = useState("overview"); // "overview" | "itinerary" | "hotels" | "reviews"
   const [expandedDay, setExpandedDay] = useState(1);
   const [copied, setCopied] = useState(false);
+
+  // Review Form State
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewAuthor, setReviewAuthor] = useState("");
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSuccess, setReviewSuccess] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [showReviewForm, setShowReviewForm] = useState(false);
+
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem("user") || "{}");
+      if (u.name) setReviewAuthor(u.name);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     // Set default dates: 14 days from now
@@ -115,6 +133,61 @@ export default function DestinationDetail() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleSubmitReview = async (e) => {
+    e.preventDefault();
+    if (!reviewComment.trim()) {
+      setReviewError("Please write a few words about your trip experience.");
+      return;
+    }
+
+    setReviewSubmitting(true);
+    setReviewError("");
+
+    try {
+      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const author = reviewAuthor.trim() || storedUser.name || "Verified Traveler";
+
+      const res = await destinationsAPI.addReview(dest._id, {
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        user: { name: author, email: storedUser.email || "" },
+      });
+
+      const newReview = res.data.review || {
+        user: { name: author },
+        rating: reviewRating,
+        comment: reviewComment.trim(),
+        createdAt: new Date().toISOString(),
+      };
+
+      setDest((prev) => ({
+        ...prev,
+        reviews: [newReview, ...(prev.reviews || [])],
+        ratings: res.data.ratings || {
+          avg: Number(
+            (
+              ((prev.ratings?.avg || 4.8) * (prev.ratings?.count || 1) + reviewRating) /
+              ((prev.ratings?.count || 1) + 1)
+            ).toFixed(1)
+          ),
+          count: (prev.ratings?.count || 0) + 1,
+        },
+      }));
+
+      setReviewComment("");
+      setReviewSuccess("Thank you! Your travel review has been submitted successfully.");
+      setShowReviewForm(false);
+      setTimeout(() => setReviewSuccess(""), 4500);
+    } catch (err) {
+      console.error(err);
+      setReviewError(
+        err.response?.data?.message || "Failed to submit review. Please try again."
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -471,35 +544,219 @@ export default function DestinationDetail() {
           {/* TAB 4: REVIEWS */}
           {activeTab === "reviews" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">Traveler Reviews</h2>
-                  <p className="text-xs text-gray-500">Real feedback from verified travelers</p>
+              {/* Header & Write Review Action */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl border border-teal-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 bg-teal-600 text-white rounded-2xl flex items-center justify-center font-black text-2xl shadow-md">
+                    {ratings.avg || 4.9}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 text-amber-500">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`w-4 h-4 ${
+                            star <= Math.round(ratings.avg || 5)
+                              ? "fill-amber-400 text-amber-400"
+                              : "text-gray-300"
+                          }`}
+                        />
+                      ))}
+                      <span className="ml-2 font-bold text-gray-900 text-sm">
+                        {ratings.avg >= 4.5 ? "Exceptional" : "Very Good"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      Based on {ratings.count || reviews.length || 24} verified traveler experiences
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 text-2xl font-black text-gray-900">
-                  <Star className="w-6 h-6 fill-amber-400 text-amber-400" />
-                  <span>{ratings.avg || 4.9}</span>
-                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowReviewForm(!showReviewForm)}
+                  className="px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer self-start sm:self-auto"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>{showReviewForm ? "Close Form" : "Write a Review"}</span>
+                </button>
               </div>
 
+              {/* Review Success Banner */}
+              {reviewSuccess && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{reviewSuccess}</span>
+                </div>
+              )}
+
+              {/* Interactive Write Review Form */}
+              {showReviewForm && (
+                <form
+                  onSubmit={handleSubmitReview}
+                  className="p-6 bg-white rounded-2xl border border-teal-200 shadow-sm space-y-4"
+                >
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <h3 className="font-bold text-sm text-gray-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-teal-600" /> Share Your Holiday Experience
+                    </h3>
+                    <span className="text-xs text-gray-400">Verified Traveler Review</span>
+                  </div>
+
+                  {reviewError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs">
+                      {reviewError}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        Your Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={reviewAuthor}
+                        onChange={(e) => setReviewAuthor(e.target.value)}
+                        placeholder="e.g. Rahul Sharma"
+                        className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500 bg-white"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                        Rate Your Experience (1 - 5 Stars)
+                      </label>
+                      <div className="flex items-center gap-1 py-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            type="button"
+                            key={star}
+                            onClick={() => setReviewRating(star)}
+                            className="p-1 hover:scale-110 transition cursor-pointer"
+                          >
+                            <Star
+                              className={`w-6 h-6 ${
+                                star <= reviewRating
+                                  ? "fill-amber-400 text-amber-400"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          </button>
+                        ))}
+                        <span className="ml-2 text-xs font-bold text-gray-600">
+                          {reviewRating === 5 && "5 - Exceptional"}
+                          {reviewRating === 4 && "4 - Very Good"}
+                          {reviewRating === 3 && "3 - Average"}
+                          {reviewRating === 2 && "2 - Poor"}
+                          {reviewRating === 1 && "1 - Terrible"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                      Review & Trip Feedback
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={reviewComment}
+                      onChange={(e) => setReviewComment(e.target.value)}
+                      placeholder="Tell future travelers about your experience — sights, hotel comfort, meals, tour guide, and key highlights..."
+                      className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-teal-500 resize-none bg-white"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowReviewForm(false)}
+                      className="px-4 py-2 border border-gray-200 text-gray-600 hover:bg-gray-50 rounded-xl text-xs font-medium cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={reviewSubmitting}
+                      className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-500/20 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{reviewSubmitting ? "Submitting..." : "Submit Review"}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Reviews List */}
               {reviews.length === 0 ? (
-                <div className="p-8 text-center bg-gray-50 rounded-2xl text-xs text-gray-500">
-                  No written reviews submitted yet. Be the first to review after completing this trip!
+                <div className="p-8 text-center bg-gray-50 rounded-2xl text-xs text-gray-500 border border-dashed border-gray-200">
+                  <MessageSquare className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="font-semibold text-gray-700">No written reviews yet</p>
+                  <p className="text-gray-400 mt-0.5">
+                    Be the first traveler to share feedback on this trip package!
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {reviews.map((rev, i) => (
-                    <div key={i} className="p-4 bg-white rounded-2xl border border-gray-200 text-xs">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-gray-900">{rev.user?.name || "Traveler"}</span>
-                        <div className="flex items-center text-amber-500">
-                          <Star className="w-3 h-3 fill-amber-400" />
-                          <span className="font-bold ml-1">{rev.rating}</span>
+                  {reviews.map((rev, i) => {
+                    const reviewerName =
+                      typeof rev.user === "object"
+                        ? rev.user?.name || "Traveler"
+                        : rev.user || "Traveler";
+                    const initial = reviewerName.charAt(0).toUpperCase();
+
+                    return (
+                      <div
+                        key={i}
+                        className="p-4 bg-white rounded-2xl border border-gray-200 text-xs shadow-xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-xs">
+                              {initial}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-gray-900">{reviewerName}</span>
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded font-medium border border-emerald-100">
+                                  Verified
+                                </span>
+                              </div>
+                              <span className="text-[10px] text-gray-400">
+                                {rev.createdAt
+                                  ? new Date(rev.createdAt).toLocaleDateString("en-IN", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })
+                                  : "Recent Traveler"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center text-amber-500 gap-0.5">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className={`w-3.5 h-3.5 ${
+                                  s <= (rev.rating || 5)
+                                    ? "fill-amber-400 text-amber-400"
+                                    : "text-gray-200"
+                                }`}
+                              />
+                            ))}
+                          </div>
                         </div>
+
+                        <p className="text-gray-700 text-xs leading-relaxed pl-10">
+                          {rev.comment}
+                        </p>
                       </div>
-                      <p className="text-gray-600 mt-1">{rev.comment}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

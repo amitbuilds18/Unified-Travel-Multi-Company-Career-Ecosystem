@@ -51,6 +51,17 @@ const destinationSchema = new mongoose.Schema(
       avg: { type: Number, default: 4.8 },
       count: { type: Number, default: 24 },
     },
+    reviews: [
+      {
+        user: {
+          name: { type: String, default: "Verified Traveler" },
+          email: { type: String },
+        },
+        rating: { type: Number, required: true, min: 1, max: 5 },
+        comment: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
 
     // Hotels list
     hotels: [

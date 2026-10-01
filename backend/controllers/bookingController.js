@@ -46,3 +46,34 @@ export const getAllBookings = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to load all bookings", error: error.message });
   }
 };
+
+export const cancelBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      $or: [{ userId: req.userId }, { user: req.userId }],
+    });
+
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found or unauthorized",
+      });
+    }
+
+    booking.status = "CANCELLED";
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Booking has been cancelled successfully. Full refund initiated.",
+      booking,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel booking",
+      error: error.message,
+    });
+  }
+};

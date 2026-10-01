@@ -1,13 +1,29 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authAPI } from "../services/api";
 import { Lock, Mail, ArrowRight, ShieldCheck, Sparkles, Building2, User, Shield } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleRedirectAfterLogin = (user) => {
+    if (location.state?.from) {
+      navigate(location.state.from, { state: location.state.checkoutState });
+      return;
+    }
+
+    if (user.role === "company_admin") {
+      navigate("/recruiter");
+    } else if (user.role === "admin" || user.role === "superadmin") {
+      navigate("/admin/superadmin");
+    } else {
+      navigate("/jobs");
+    }
+  };
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -24,11 +40,7 @@ export default function Login() {
       // Notify header and app of auth state change
       window.dispatchEvent(new Event("authChange"));
 
-      if (user.role === "company_admin") {
-        navigate("/recruiter");
-      } else {
-        navigate("/jobs");
-      }
+      handleRedirectAfterLogin(user);
     } catch (err) {
       setError(
         err.response?.data?.message || "Invalid email or password. Please try again."
@@ -48,13 +60,7 @@ export default function Login() {
         localStorage.setItem("token", token);
         localStorage.setItem("user", JSON.stringify(user));
         window.dispatchEvent(new Event("authChange"));
-        if (user.role === "company_admin") {
-          navigate("/recruiter");
-        } else if (user.role === "admin" || user.role === "superadmin") {
-          navigate("/admin/superadmin");
-        } else {
-          navigate("/jobs");
-        }
+        handleRedirectAfterLogin(user);
       })
       .catch((err) => {
         setError(err.response?.data?.message || "Demo login failed");

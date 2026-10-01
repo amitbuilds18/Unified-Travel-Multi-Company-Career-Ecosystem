@@ -69,6 +69,8 @@ export const destinationsAPI = {
 export const bookingsAPI = {
   getAll: () => api.get("/api/bookings/all"),
   getMy: () => api.get("/api/bookings/mine"),
+  create: (data) => api.post("/api/bookings", data),
+  cancel: (id) => api.put(`/api/bookings/${id}/cancel`),
 };
 
 export default api;
