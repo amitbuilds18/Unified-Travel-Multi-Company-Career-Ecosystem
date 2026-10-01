@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import razorpay from "../config/razorpay.js";
 import Booking from "../models/Booking.js";
+import Notification from "../models/Notification.js";
 
 // GET PUBLIC KEY FOR FRONTEND
 export const getRazorpayKey = (req, res) => {
@@ -65,6 +66,18 @@ export const verifyPayment = async (req, res) => {
       status: "CONFIRMED",
     });
 
+    if (req.userId) {
+      try {
+        await Notification.create({
+          userId: req.userId,
+          title: "Holiday Booking Confirmed ✈️",
+          message: `Your booking for "${booking.destinationTitle || "Holiday Package"}" is confirmed! Travel voucher issued.`,
+          type: "BOOKING_CONFIRMED",
+          link: "/my-bookings",
+        });
+      } catch (e) {}
+    }
+
     res.status(200).json({ success: true, booking });
   } catch (error) {
     console.error("Payment verification error:", error);
@@ -88,6 +101,18 @@ export const createInstantBooking = async (req, res) => {
       orderId: "ORD_" + Date.now(),
       status: "CONFIRMED",
     });
+
+    if (req.userId) {
+      try {
+        await Notification.create({
+          userId: req.userId,
+          title: "Holiday Booking Confirmed ✈️",
+          message: `Your booking for "${booking.destinationTitle || "Holiday Package"}" is confirmed! Travel voucher issued.`,
+          type: "BOOKING_CONFIRMED",
+          link: "/my-bookings",
+        });
+      } catch (e) {}
+    }
 
     res.status(201).json({ success: true, booking });
   } catch (error) {

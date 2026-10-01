@@ -73,4 +73,12 @@ export const bookingsAPI = {
   cancel: (id) => api.put(`/api/bookings/${id}/cancel`),
 };
 
+// Notifications APIs
+export const notificationsAPI = {
+  getAll: () => api.get("/api/notifications"),
+  markAsRead: (id) => api.patch(`/api/notifications/${id}/read`),
+  markAllAsRead: () => api.patch("/api/notifications/read-all"),
+  delete: (id) => api.delete(`/api/notifications/${id}`),
+};
+
 export default api;

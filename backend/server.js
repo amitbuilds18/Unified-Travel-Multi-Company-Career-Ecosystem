@@ -16,6 +16,7 @@ import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import superAdminRoutes from "./routes/superAdminRoutes.js";
 import travelRoutes from "./routes/travelRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 // CONFIG
 dotenv.config();
@@ -50,7 +51,8 @@ app.use("/api/travel", travelRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/superadmin", superAdminRoutes);
 
-// REVIEWS
+// REVIEWS & NOTIFICATIONS
+app.use("/api/notifications", notificationRoutes);
 app.use("/api", reviewRoutes);
 
 // ROOT

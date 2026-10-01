@@ -13,6 +13,7 @@ import {
   Compass,
   Receipt,
 } from "lucide-react";
+import NotificationCenter from "./NotificationCenter";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -156,6 +157,8 @@ export default function Header() {
           <div className="hidden md:flex items-center space-x-3">
             {user ? (
               <div className="flex items-center space-x-3">
+                <NotificationCenter />
+
                 <Link
                   to="/profile"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-gray-300 bg-gray-50/50 hover:bg-gray-100 transition text-sm text-gray-700"
@@ -199,11 +202,12 @@ export default function Header() {
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="flex md:hidden items-center">
+          {/* Mobile menu button & Mobile Notification */}
+          <div className="flex md:hidden items-center gap-1.5">
+            {user && <NotificationCenter />}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100"
+              className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 cursor-pointer"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>

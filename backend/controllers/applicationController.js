@@ -2,6 +2,7 @@ import Application from "../models/Application.js";
 import Company from "../models/Company.js";
 import Job from "../models/Job.js";
 import User from "../models/User.js";
+import Notification from "../models/Notification.js";
 
 // Core Feature: Batch Apply to Multiple Companies / Jobs
 export const batchApply = async (req, res) => {
@@ -88,6 +89,20 @@ export const batchApply = async (req, res) => {
     }
     await user.save();
 
+    if (createdApplications.length > 0) {
+      try {
+        await Notification.create({
+          userId: req.userId,
+          title: "Batch Application Submitted 🚀",
+          message: `Your profile was submitted to ${createdApplications.length} company openings. (Ref: ${batchApplicationId})`,
+          type: "JOB_APPLY",
+          link: "/my-applications",
+        });
+      } catch (notifErr) {
+        console.warn("Notification error:", notifErr);
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: `Successfully submitted applications to ${createdApplications.length} companies/openings`,
@@ -157,6 +172,17 @@ export const singleApply = async (req, res) => {
       experienceYears: Number(experienceYears) || user.experienceYears || 0,
       status: "Pending",
     });
+
+    try {
+      const company = await Company.findById(companyId);
+      await Notification.create({
+        userId: req.userId,
+        title: "Application Submitted 📄",
+        message: `Your application to ${company?.name || "the employer"} was successfully received.`,
+        type: "JOB_APPLY",
+        link: "/my-applications",
+      });
+    } catch (e) {}
 
     res.status(201).json({
       success: true,
@@ -267,6 +293,21 @@ export const updateApplicationStatus = async (req, res) => {
     if (recruiterNotes !== undefined) application.recruiterNotes = recruiterNotes;
 
     await application.save();
+
+    // Trigger notification to candidate
+    if (application.applicant) {
+      try {
+        await Notification.create({
+          userId: application.applicant,
+          title: `Application Status: ${status} 🎯`,
+          message: `${company?.name || "The recruiter"} updated your application status to "${status}".`,
+          type: "APPLICATION_STATUS",
+          link: "/my-applications",
+        });
+      } catch (e) {
+        console.warn("Notification create error:", e);
+      }
+    }
 
     res.json({
       success: true,

@@ -1,4 +1,5 @@
 import Booking from "../models/Booking.js";
+import Notification from "../models/Notification.js";
 
 export const addBooking = async (req, res) => {
   try {
@@ -13,6 +14,18 @@ export const addBooking = async (req, res) => {
       paymentId: req.body.paymentId || "PAY_DIRECT_" + Date.now(),
       status: "CONFIRMED",
     });
+
+    if (req.userId) {
+      try {
+        await Notification.create({
+          userId: req.userId,
+          title: "Holiday Booking Confirmed ✈️",
+          message: `Your booking for "${booking.destinationTitle || "Holiday Package"}" is confirmed. Travel voucher issued!`,
+          type: "BOOKING_CONFIRMED",
+          link: "/my-bookings",
+        });
+      } catch (e) {}
+    }
 
     res.status(201).json({ success: true, booking });
   } catch (error) {
@@ -63,6 +76,18 @@ export const cancelBooking = async (req, res) => {
 
     booking.status = "CANCELLED";
     await booking.save();
+
+    if (booking.userId) {
+      try {
+        await Notification.create({
+          userId: booking.userId,
+          title: "Booking Cancelled 💳",
+          message: `Your booking for "${booking.destinationTitle}" was cancelled. Full refund has been initiated.`,
+          type: "BOOKING_CANCELLED",
+          link: "/my-bookings",
+        });
+      } catch (e) {}
+    }
 
     res.json({
       success: true,
