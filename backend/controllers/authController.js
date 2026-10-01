@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import Company from "../models/Company.js";
+import Job from "../models/Job.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
@@ -130,6 +131,7 @@ export const loginUser = async (req, res) => {
         resumeUrl: user.resumeUrl,
         experienceYears: user.experienceYears,
         company: user.company,
+        savedJobs: user.savedJobs || [],
       },
     });
   } catch (error) {
@@ -258,3 +260,65 @@ export const updateProfile = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Toggle Save/Bookmark Job
+export const toggleSaveJob = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.savedJobs) {
+      user.savedJobs = [];
+    }
+
+    const index = user.savedJobs.findIndex((id) => id.toString() === jobId.toString());
+    let isSaved = false;
+
+    if (index > -1) {
+      user.savedJobs.splice(index, 1);
+      isSaved = false;
+    } else {
+      user.savedJobs.push(jobId);
+      isSaved = true;
+    }
+
+    await user.save();
+
+    res.json({
+      message: isSaved ? "Job added to your saved bookmarks ❤️" : "Job removed from saved bookmarks",
+      isSaved,
+      savedJobs: user.savedJobs,
+    });
+  } catch (error) {
+    console.error("toggleSaveJob error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+// Get all Saved Jobs for Current User
+export const getSavedJobs = async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).populate({
+      path: "savedJobs",
+      populate: { path: "company", select: "name logo industry location isVerified slug" },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Filter out nulls in case any referenced job was deleted
+    const validJobs = (user.savedJobs || []).filter((job) => job !== null);
+
+    res.json({
+      savedJobs: validJobs,
+    });
+  } catch (error) {
+    console.error("getSavedJobs error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+

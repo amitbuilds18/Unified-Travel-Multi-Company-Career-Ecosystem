@@ -23,6 +23,8 @@ export const authAPI = {
   adminLogin: (credentials) => api.post("/api/auth/admin-login", credentials),
   getProfile: () => api.get("/api/auth/profile"),
   updateProfile: (data) => api.put("/api/auth/profile", data),
+  toggleSaveJob: (jobId) => api.post(`/api/auth/save-job/${jobId}`),
+  getSavedJobs: () => api.get("/api/auth/saved-jobs"),
 };
 
 // Company APIs
@@ -42,6 +44,8 @@ export const jobsAPI = {
   create: (data) => api.post("/api/jobs", data),
   update: (id, data) => api.put(`/api/jobs/${id}`, data),
   delete: (id) => api.delete(`/api/jobs/${id}`),
+  toggleSaveJob: (jobId) => api.post(`/api/auth/save-job/${jobId}`),
+  getSavedJobs: () => api.get("/api/auth/saved-jobs"),
 };
 
 // Applications APIs (Batch & Single)

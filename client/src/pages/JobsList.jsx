@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { jobsAPI } from "../services/api";
+import { jobsAPI, authAPI } from "../services/api";
 import BatchApplyModal from "../components/BatchApplyModal";
 import { calculateATSScore } from "../utils/atsMatcher";
 import {
@@ -22,6 +22,8 @@ import {
   Zap,
   TrendingUp,
   Plus,
+  Heart,
+  BookmarkCheck,
 } from "lucide-react";
 
 export default function JobsList() {
@@ -54,7 +56,12 @@ export default function JobsList() {
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [modalJobs, setModalJobs] = useState([]);
 
-  // Load candidate profile skills if logged in
+  // Saved Jobs / Bookmarks State
+  const [savedJobIds, setSavedJobIds] = useState(new Set());
+  const [showOnlySaved, setShowOnlySaved] = useState(false);
+  const [saveActionLoading, setSaveActionLoading] = useState(null);
+
+  // Load candidate profile skills and saved jobs if logged in
   useEffect(() => {
     try {
       const stored = localStorage.getItem("user");
@@ -65,9 +72,81 @@ export default function JobsList() {
         } else if (typeof u.skills === "string" && u.skills.trim()) {
           setCandidateSkills(u.skills.split(",").map((s) => s.trim()));
         }
+        if (Array.isArray(u.savedJobs)) {
+          const ids = u.savedJobs.map((item) =>
+            typeof item === "object" && item?._id ? item._id : item
+          );
+          setSavedJobIds(new Set(ids));
+        }
       }
     } catch {}
+
+    const token = localStorage.getItem("token");
+    if (token) {
+      authAPI
+        .getProfile()
+        .then((res) => {
+          const u = res.data?.user;
+          if (u && Array.isArray(u.savedJobs)) {
+            const ids = u.savedJobs.map((item) =>
+              typeof item === "object" && item?._id ? item._id : item
+            );
+            setSavedJobIds(new Set(ids));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
+
+  const handleToggleSaveJob = async (jobId) => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Please sign in to save jobs to your bookmarks ❤️");
+      return;
+    }
+
+    // Optimistic toggle
+    setSavedJobIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
+    });
+
+    try {
+      setSaveActionLoading(jobId);
+      const res = await authAPI.toggleSaveJob(jobId);
+      if (res.data?.savedJobs) {
+        const ids = res.data.savedJobs.map((item) =>
+          typeof item === "object" && item?._id ? item._id : item
+        );
+        setSavedJobIds(new Set(ids));
+
+        const stored = localStorage.getItem("user");
+        if (stored) {
+          try {
+            const u = JSON.parse(stored);
+            u.savedJobs = res.data.savedJobs;
+            localStorage.setItem("user", JSON.stringify(u));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error("Failed to toggle save job:", err);
+      // Revert optimistic toggle
+      setSavedJobIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(jobId)) next.delete(jobId);
+        else next.add(jobId);
+        return next;
+      });
+    } finally {
+      setSaveActionLoading(null);
+    }
+  };
 
   const handleAddSkill = (e) => {
     e.preventDefault();
@@ -181,9 +260,10 @@ export default function JobsList() {
     return { ...job, ats };
   });
 
-  // Filter and sort jobs based on ATS and salary criteria
+  // Filter and sort jobs based on ATS, saved status, and salary criteria
   const processedJobs = jobsWithAts
     .filter((job) => {
+      if (showOnlySaved && !savedJobIds.has(job._id)) return false;
       if (atsFilter === "HIGH") return job.ats.score >= 80;
       if (atsFilter === "MODERATE") return job.ats.score >= 50;
       return true;
@@ -383,7 +463,27 @@ export default function JobsList() {
             <option value="SALARY">Sort: Highest Salary 💰</option>
           </select>
 
-          {(search || jobType !== "All" || category !== "All" || atsFilter !== "ALL" || sortBy !== "DEFAULT") && (
+          {/* Saved Jobs Wishlist Filter Button */}
+          <button
+            type="button"
+            onClick={() => setShowOnlySaved(!showOnlySaved)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+              showOnlySaved
+                ? "bg-rose-500 text-white border-rose-600 shadow-xs"
+                : savedJobIds.size > 0
+                ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+            }`}
+          >
+            <Heart
+              className={`w-3.5 h-3.5 ${
+                showOnlySaved || savedJobIds.size > 0 ? "fill-rose-500 text-rose-500" : ""
+              }`}
+            />
+            <span>Saved Jobs ({savedJobIds.size})</span>
+          </button>
+
+          {(search || jobType !== "All" || category !== "All" || atsFilter !== "ALL" || sortBy !== "DEFAULT" || showOnlySaved) && (
             <button
               onClick={() => {
                 setSearch("");
@@ -391,6 +491,7 @@ export default function JobsList() {
                 setCategory("All");
                 setAtsFilter("ALL");
                 setSortBy("DEFAULT");
+                setShowOnlySaved(false);
               }}
               className="text-xs text-blue-600 hover:underline px-2 py-1 cursor-pointer font-semibold"
             >
@@ -420,6 +521,39 @@ export default function JobsList() {
         </div>
       </div>
 
+      {/* Saved Jobs Banner with 1-Click Multi Apply */}
+      {showOnlySaved && (
+        <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 text-rose-900">
+            <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <Heart className="w-4 h-4 fill-rose-600 text-rose-600" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-rose-950">
+                Saved Openings Wishlist ({processedJobs.length})
+              </p>
+              <p className="text-rose-700 text-xs">
+                Review your bookmarked positions or apply to all of them at once with your profile.
+              </p>
+            </div>
+          </div>
+          {processedJobs.length > 0 && (
+            <button
+              onClick={() => {
+                const allSavedIds = new Set(processedJobs.map((j) => j._id));
+                setSelectedJobIds(allSavedIds);
+                setModalJobs(processedJobs);
+                setShowBatchModal(true);
+              }}
+              className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs transition flex items-center gap-2 cursor-pointer whitespace-nowrap"
+            >
+              <Zap className="w-4 h-4" />
+              <span>1-Click Apply to All Saved ({processedJobs.length})</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Loading & Error States */}
       {loading && (
         <div className="py-20 text-center space-y-3">
@@ -444,8 +578,22 @@ export default function JobsList() {
       {!loading && !error && processedJobs.length === 0 && (
         <div className="p-12 text-center bg-gray-50 rounded-2xl border border-gray-100 my-6">
           <Briefcase className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-          <h3 className="text-lg font-bold text-gray-800">No Openings Match Your Filters</h3>
-          <p className="text-sm text-gray-500 mt-1">Try resetting your ATS fit filter or search keywords.</p>
+          <h3 className="text-lg font-bold text-gray-800">
+            {showOnlySaved ? "No Saved Jobs in Wishlist" : "No Openings Match Your Filters"}
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            {showOnlySaved
+              ? "Click the ❤️ heart icon on any job card to save it for quick review and 1-click batch application."
+              : "Try resetting your ATS fit filter or search keywords."}
+          </p>
+          {showOnlySaved && (
+            <button
+              onClick={() => setShowOnlySaved(false)}
+              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+            >
+              Browse All Openings
+            </button>
+          )}
         </div>
       )}
 
@@ -578,6 +726,30 @@ export default function JobsList() {
                     </button>
 
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSaveJob(job._id)}
+                        disabled={saveActionLoading === job._id}
+                        className={`p-2 rounded-xl border transition-all duration-200 cursor-pointer flex items-center justify-center ${
+                          savedJobIds.has(job._id)
+                            ? "bg-rose-50 text-rose-600 border-rose-200 shadow-2xs hover:bg-rose-100"
+                            : "bg-white text-gray-400 border-gray-200 hover:text-rose-500 hover:border-rose-200 hover:bg-rose-50/40"
+                        }`}
+                        title={
+                          savedJobIds.has(job._id)
+                            ? "Remove from Saved Jobs"
+                            : "Save Job to Bookmarks ❤️"
+                        }
+                      >
+                        <Heart
+                          className={`w-4 h-4 transition-transform active:scale-125 ${
+                            savedJobIds.has(job._id)
+                              ? "fill-rose-500 text-rose-500"
+                              : ""
+                          }`}
+                        />
+                      </button>
+
                       <button
                         onClick={() => handleSingleApply(job)}
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer whitespace-nowrap"

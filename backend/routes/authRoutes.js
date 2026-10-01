@@ -5,6 +5,8 @@ import {
   adminLogin,
   getProfile,
   updateProfile,
+  toggleSaveJob,
+  getSavedJobs,
 } from "../controllers/authController.js";
 import { protect } from "../middleware/auth.js";
 
@@ -16,5 +18,7 @@ router.post("/admin-login", adminLogin);
 router.post("/admin/login", adminLogin); // Alias to prevent client route mismatch
 router.get("/profile", protect, getProfile);
 router.put("/profile", protect, updateProfile);
+router.post("/save-job/:jobId", protect, toggleSaveJob);
+router.get("/saved-jobs", protect, getSavedJobs);
 
 export default router;
