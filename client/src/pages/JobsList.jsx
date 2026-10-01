@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { jobsAPI } from "../services/api";
 import BatchApplyModal from "../components/BatchApplyModal";
+import { calculateATSScore } from "../utils/atsMatcher";
 import {
   Search,
   Building2,
@@ -15,6 +16,12 @@ import {
   CheckSquare,
   Square,
   ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  X,
+  Zap,
+  TrendingUp,
+  Plus,
 } from "lucide-react";
 
 export default function JobsList() {
@@ -28,10 +35,71 @@ export default function JobsList() {
   const [jobType, setJobType] = useState("All");
   const [category, setCategory] = useState("All");
 
+  // AI ATS Matcher State
+  const [candidateSkills, setCandidateSkills] = useState([
+    "React",
+    "Node.js",
+    "Express",
+    "MongoDB",
+    "Tailwind CSS",
+    "TypeScript",
+  ]);
+  const [newSkillInput, setNewSkillInput] = useState("");
+  const [atsFilter, setAtsFilter] = useState("ALL"); // "ALL" | "HIGH" | "MODERATE"
+  const [sortBy, setSortBy] = useState("DEFAULT"); // "DEFAULT" | "MATCH" | "SALARY"
+  const [expandedMatchJobId, setExpandedMatchJobId] = useState(null);
+
   // Multi-Selection State for Batch Apply
   const [selectedJobIds, setSelectedJobIds] = useState(new Set());
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [modalJobs, setModalJobs] = useState([]);
+
+  // Load candidate profile skills if logged in
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (Array.isArray(u.skills) && u.skills.length > 0) {
+          setCandidateSkills(u.skills);
+        } else if (typeof u.skills === "string" && u.skills.trim()) {
+          setCandidateSkills(u.skills.split(",").map((s) => s.trim()));
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleAddSkill = (e) => {
+    e.preventDefault();
+    if (!newSkillInput.trim()) return;
+    const clean = newSkillInput.trim();
+    if (!candidateSkills.some((s) => s.toLowerCase() === clean.toLowerCase())) {
+      const updated = [...candidateSkills, clean];
+      setCandidateSkills(updated);
+      try {
+        const stored = localStorage.getItem("user");
+        if (stored) {
+          const u = JSON.parse(stored);
+          u.skills = updated;
+          localStorage.setItem("user", JSON.stringify(u));
+        }
+      } catch {}
+    }
+    setNewSkillInput("");
+  };
+
+  const handleRemoveSkill = (skillToRemove) => {
+    const updated = candidateSkills.filter((s) => s !== skillToRemove);
+    setCandidateSkills(updated);
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const u = JSON.parse(stored);
+        u.skills = updated;
+        localStorage.setItem("user", JSON.stringify(u));
+      }
+    } catch {}
+  };
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -107,10 +175,29 @@ export default function JobsList() {
     return `${curr}${((min || max) / 100000).toFixed(1)}L / yr`;
   };
 
+  // Calculate ATS match for every job
+  const jobsWithAts = jobs.map((job) => {
+    const ats = calculateATSScore(candidateSkills, job);
+    return { ...job, ats };
+  });
+
+  // Filter and sort jobs based on ATS and salary criteria
+  const processedJobs = jobsWithAts
+    .filter((job) => {
+      if (atsFilter === "HIGH") return job.ats.score >= 80;
+      if (atsFilter === "MODERATE") return job.ats.score >= 50;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "MATCH") return b.ats.score - a.ats.score;
+      if (sortBy === "SALARY") return (b.salaryMax || 0) - (a.salaryMax || 0);
+      return 0;
+    });
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl pb-32">
       {/* Hero Banner */}
-      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden mb-8">
+      <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-6 sm:p-10 text-white shadow-xl relative overflow-hidden mb-6">
         <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
         <div className="max-w-2xl relative z-10">
@@ -149,6 +236,111 @@ export default function JobsList() {
         </div>
       </div>
 
+      {/* INTERACTIVE AI ATS MATCH ENGINE WIDGET */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-indigo-100 shadow-sm mb-6 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-purple-50/30">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-blue-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-black text-sm sm:text-base text-gray-900">
+                  AI ATS Skill Match Engine
+                </h3>
+                <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                  Live Calculator
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Simulating applicant tracking systems. Match percentages update live as you add or remove skills below.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick ATS Match Filter */}
+          <div className="flex items-center gap-1.5 self-start sm:self-auto bg-white p-1 rounded-xl border border-gray-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setAtsFilter("ALL")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                atsFilter === "ALL"
+                  ? "bg-gray-900 text-white shadow-xs"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              All Matches
+            </button>
+            <button
+              type="button"
+              onClick={() => setAtsFilter("HIGH")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                atsFilter === "HIGH"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-emerald-700 hover:bg-emerald-50"
+              }`}
+            >
+              <Zap className="w-3 h-3 text-yellow-300" />
+              <span>⚡ 80%+ High Fit</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAtsFilter("MODERATE")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                atsFilter === "MODERATE"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-blue-700 hover:bg-blue-50"
+              }`}
+            >
+              50%+ Match
+            </button>
+          </div>
+        </div>
+
+        {/* Candidate Skills Pills & Add Skill Form */}
+        <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-indigo-100">
+          <span className="text-xs font-bold text-gray-700 mr-1 flex items-center gap-1">
+            <span>Your Active Skills ({candidateSkills.length}):</span>
+          </span>
+
+          {candidateSkills.map((skill, idx) => (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-white text-gray-800 border border-indigo-200/80 shadow-2xs group hover:border-red-300 hover:bg-red-50/30 transition"
+            >
+              <span>{skill}</span>
+              <button
+                type="button"
+                onClick={() => handleRemoveSkill(skill)}
+                className="text-gray-400 group-hover:text-red-500 hover:scale-125 transition cursor-pointer"
+                title={`Remove ${skill}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+
+          {/* Inline Add Skill Input */}
+          <form onSubmit={handleAddSkill} className="inline-flex items-center gap-1">
+            <input
+              type="text"
+              value={newSkillInput}
+              onChange={(e) => setNewSkillInput(e.target.value)}
+              placeholder="+ Add skill (e.g. Docker, Python)..."
+              className="px-3 py-1 text-xs bg-white border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 w-52 shadow-2xs"
+            />
+            {newSkillInput.trim() && (
+              <button
+                type="submit"
+                className="px-2.5 py-1 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition cursor-pointer shadow-xs"
+              >
+                Add
+              </button>
+            )}
+          </form>
+        </div>
+      </div>
+
       {/* Filter and Selection Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100">
         {/* Filters */}
@@ -181,16 +373,28 @@ export default function JobsList() {
             <option value="Design">UI/UX Design</option>
           </select>
 
-          {(search || jobType !== "All" || category !== "All") && (
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-1.5 bg-indigo-50/50 hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-bold text-indigo-700 outline-none transition cursor-pointer"
+          >
+            <option value="DEFAULT">Sort: Default</option>
+            <option value="MATCH">Sort: Highest ATS Match ⚡</option>
+            <option value="SALARY">Sort: Highest Salary 💰</option>
+          </select>
+
+          {(search || jobType !== "All" || category !== "All" || atsFilter !== "ALL" || sortBy !== "DEFAULT") && (
             <button
               onClick={() => {
                 setSearch("");
                 setJobType("All");
                 setCategory("All");
+                setAtsFilter("ALL");
+                setSortBy("DEFAULT");
               }}
-              className="text-xs text-blue-600 hover:underline px-2 py-1"
+              className="text-xs text-blue-600 hover:underline px-2 py-1 cursor-pointer font-semibold"
             >
-              Reset
+              Reset All
             </button>
           )}
         </div>
@@ -199,9 +403,9 @@ export default function JobsList() {
         <div className="flex items-center gap-3">
           <button
             onClick={toggleSelectAll}
-            className="text-xs font-medium text-gray-600 hover:text-blue-600 flex items-center gap-1.5 py-1 px-2 rounded-md hover:bg-gray-100 transition"
+            className="text-xs font-medium text-gray-600 hover:text-blue-600 flex items-center gap-1.5 py-1 px-2 rounded-md hover:bg-gray-100 transition cursor-pointer"
           >
-            {selectedJobIds.size === jobs.length && jobs.length > 0 ? (
+            {selectedJobIds.size === processedJobs.length && processedJobs.length > 0 ? (
               <>
                 <CheckSquare className="w-4 h-4 text-blue-600" />
                 <span>Deselect All</span>
@@ -209,7 +413,7 @@ export default function JobsList() {
             ) : (
               <>
                 <Square className="w-4 h-4 text-gray-400" />
-                <span>Select All ({jobs.length})</span>
+                <span>Select All ({processedJobs.length})</span>
               </>
             )}
           </button>
@@ -229,7 +433,7 @@ export default function JobsList() {
           <p className="font-semibold">{error}</p>
           <button
             onClick={fetchJobs}
-            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition"
+            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition cursor-pointer"
           >
             Retry Connection
           </button>
@@ -237,19 +441,21 @@ export default function JobsList() {
       )}
 
       {/* Jobs Grid */}
-      {!loading && !error && jobs.length === 0 && (
+      {!loading && !error && processedJobs.length === 0 && (
         <div className="p-12 text-center bg-gray-50 rounded-2xl border border-gray-100 my-6">
           <Briefcase className="w-10 h-10 text-gray-400 mx-auto mb-2" />
           <h3 className="text-lg font-bold text-gray-800">No Openings Match Your Filters</h3>
-          <p className="text-sm text-gray-500 mt-1">Try clearing your search term or selecting another category.</p>
+          <p className="text-sm text-gray-500 mt-1">Try resetting your ATS fit filter or search keywords.</p>
         </div>
       )}
 
-      {!loading && !error && jobs.length > 0 && (
+      {!loading && !error && processedJobs.length > 0 && (
         <div className="space-y-4">
-          {jobs.map((job) => {
+          {processedJobs.map((job) => {
             const isSelected = selectedJobIds.has(job._id);
             const company = job.company || {};
+            const ats = job.ats;
+            const isExpanded = expandedMatchJobId === job._id;
 
             return (
               <div
@@ -262,12 +468,12 @@ export default function JobsList() {
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                   {/* Left: Checkbox + Logo + Info */}
-                  <div className="flex items-start gap-4">
+                  <div className="flex items-start gap-4 flex-1">
                     {/* Multi-apply Checkbox */}
                     <button
                       type="button"
                       onClick={() => toggleSelectJob(job._id)}
-                      className="mt-1 text-gray-400 hover:text-blue-600 transition"
+                      className="mt-1 text-gray-400 hover:text-blue-600 transition cursor-pointer"
                       title={isSelected ? "Remove from Multi-Apply" : "Select for Multi-Apply"}
                     >
                       {isSelected ? (
@@ -288,7 +494,7 @@ export default function JobsList() {
                     />
 
                     {/* Details */}
-                    <div>
+                    <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Link
                           to={`/companies/${company.slug || company._id}`}
@@ -330,40 +536,123 @@ export default function JobsList() {
                       {/* Skills Tags */}
                       {job.skillsRequired && job.skillsRequired.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 mt-3">
-                          {job.skillsRequired.map((skill, i) => (
-                            <span
-                              key={i}
-                              className="text-[11px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded border border-gray-100"
-                            >
-                              {skill}
-                            </span>
-                          ))}
+                          {job.skillsRequired.map((skill, i) => {
+                            const isMatched = ats.matchedSkills.includes(skill);
+                            return (
+                              <span
+                                key={i}
+                                className={`text-[11px] font-medium px-2 py-0.5 rounded border transition ${
+                                  isMatched
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200 font-semibold"
+                                    : "bg-gray-50 text-gray-500 border-gray-100"
+                                }`}
+                              >
+                                {isMatched ? `✓ ${skill}` : skill}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Right: Actions */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                  {/* Right: ATS Match Pill + Apply Actions */}
+                  <div className="flex flex-col sm:items-end justify-between gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100 shrink-0">
+                    {/* Live ATS Match Badge Button */}
                     <button
-                      onClick={() => handleSingleApply(job)}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer whitespace-nowrap"
+                      type="button"
+                      onClick={() => setExpandedMatchJobId(isExpanded ? null : job._id)}
+                      className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 shadow-2xs transition cursor-pointer hover:shadow-xs ${ats.badgeColor}`}
+                      title="Click to view full ATS skill analysis breakdown"
                     >
-                      Apply Directly
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{ats.score}% ATS Match</span>
+                      <span className="hidden sm:inline font-normal text-[10px] opacity-80">
+                        • {ats.label}
+                      </span>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                          isExpanded ? "rotate-180" : ""
+                        }`}
+                      />
                     </button>
 
-                    <button
-                      onClick={() => toggleSelectJob(job._id)}
-                      className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition whitespace-nowrap cursor-pointer ${
-                        isSelected
-                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                          : "text-gray-600 border-gray-200 hover:bg-gray-50"
-                      }`}
-                    >
-                      {isSelected ? "✓ Included in Batch" : "+ Select for Multi-Apply"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleSingleApply(job)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm cursor-pointer whitespace-nowrap"
+                      >
+                        Apply Directly
+                      </button>
+
+                      <button
+                        onClick={() => toggleSelectJob(job._id)}
+                        className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition whitespace-nowrap cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-50 text-blue-700 border-blue-200"
+                            : "text-gray-600 border-gray-200 hover:bg-gray-50"
+                        }`}
+                      >
+                        {isSelected ? "✓ Selected" : "+ Batch Apply"}
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Expandable ATS Match Breakdown Drawer */}
+                {isExpanded && (
+                  <div className="mt-4 pt-3.5 border-t border-gray-100 bg-gray-50/70 p-4 rounded-xl space-y-2.5 text-xs animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-gray-900">
+                        <Sparkles className="w-4 h-4 text-indigo-600" />
+                        <span>
+                          ATS Match Analysis: {ats.matchCount} of {ats.totalRequired} requirements met
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-semibold text-gray-500">
+                        {ats.score >= 80
+                          ? "🎯 High interview callback probability"
+                          : "💡 Add missing keywords to boost ranking"}
+                      </span>
+                    </div>
+
+                    {/* Matched Skills */}
+                    {ats.matchedSkills.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-emerald-800 mr-1">
+                          Matching Strengths:
+                        </span>
+                        {ats.matchedSkills.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/70 text-emerald-900 font-semibold text-[10px] border border-emerald-200"
+                          >
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Missing Skills */}
+                    {ats.missingSkills.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-amber-800 mr-1">
+                          Missing in your profile:
+                        </span>
+                        {ats.missingSkills.map((s, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 font-medium text-[10px] border border-amber-200/80"
+                          >
+                            <span>+</span>
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -390,29 +679,29 @@ export default function JobsList() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSelectedJobIds(new Set())}
-              className="text-xs text-gray-400 hover:text-white px-2 py-1"
+              className="text-xs text-gray-400 hover:text-white px-2 py-1 transition cursor-pointer"
             >
               Clear
             </button>
             <button
               onClick={handleBatchApply}
-              className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-lg shadow-blue-500/30 flex items-center gap-1.5 transition cursor-pointer"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs sm:text-sm shadow-md shadow-blue-500/30 transition flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Apply to All Selected</span>
+              <span>Apply to Selected ({selectedJobIds.size})</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Batch Apply Modal */}
+      {/* Multi-Company Application Modal */}
       {showBatchModal && (
         <BatchApplyModal
           selectedJobs={modalJobs}
           onClose={() => setShowBatchModal(false)}
           onSuccess={() => {
-            // Uncheck submitted jobs
             setSelectedJobIds(new Set());
+            setShowBatchModal(false);
           }}
         />
       )}

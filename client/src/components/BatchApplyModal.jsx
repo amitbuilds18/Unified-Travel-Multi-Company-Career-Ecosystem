@@ -10,7 +10,9 @@ import {
   FileText,
   AlertCircle,
   ExternalLink,
+  Sparkles,
 } from "lucide-react";
+import { calculateBatchATS } from "../utils/atsMatcher";
 
 export default function BatchApplyModal({ selectedJobs = [], onClose, onSuccess }) {
   const navigate = useNavigate();
@@ -164,6 +166,36 @@ export default function BatchApplyModal({ selectedJobs = [], onClose, onSuccess 
                 <span>{error}</span>
               </div>
             )}
+
+            {/* ATS Match Compatibility Banner */}
+            {(() => {
+              const batchAts = calculateBatchATS(form.skills, selectedJobs);
+              return (
+                <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 rounded-2xl border border-emerald-200/70 flex items-center justify-between text-xs shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 font-black text-gray-900">
+                        <span>Batch ATS Fit: {batchAts.avgScore}% Match</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                          {batchAts.avgScore >= 80 ? "Optimal Candidate Fit" : "Competitive Match"}
+                        </span>
+                      </div>
+                      {batchAts.topMatches.length > 0 && (
+                        <p className="text-[11px] text-gray-600 mt-0.5">
+                          Top Strengths:{" "}
+                          <span className="font-semibold text-emerald-700">
+                            {batchAts.topMatches.slice(0, 4).join(", ")}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Selected Companies Preview Pill Box */}
             <div>
